@@ -41,3 +41,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/NwkError"
+
+components:
+  schemas:
+    NwkRawRawValueObjectClass:
+      type: object
+      required:
+        - name
+      properties:
+        id:
+          type: string
+
+    NwkError:
+      type: object
+      description: Описание ошибки
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+          format: int32
+          description: Код ошибки
+        message:
+          type: string
+          description: Сообщение об ошибке
