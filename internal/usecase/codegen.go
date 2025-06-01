@@ -16,7 +16,7 @@ func NewCodeGenerator() *CodeGenerator {
 }
 
 func (c *CodeGenerator) Generate(templateDir string, outputDir string, data model.ParsedYAML) error {
-	return filepath.Walk(templateDir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(templateDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -33,13 +33,71 @@ func (c *CodeGenerator) Generate(templateDir string, outputDir string, data mode
 		}
 
 		if strings.HasSuffix(info.Name(), ".tmpl") {
+			// Пропускаем шаблон valueObject.php.tmpl, чтобы не создавать valueObject.php
+			if relPath == filepath.Join("php84_symfony6", "Api", "valueObject.php.tmpl") {
+				return nil
+			}
+
 			tmplData := buildTemplateData(data, relPath)
-			return c.generateFile(path, targetPath[:len(targetPath)-5], tmplData)
+
+			outFile := targetPath[:len(targetPath)-5] // стандартное имя
+
+			// Проверяем, что файл лежит в директории Controller
+			if strings.Contains(relPath, string(os.PathSeparator)+"Controller"+string(os.PathSeparator)) ||
+				strings.HasPrefix(relPath, "Controller"+string(os.PathSeparator)) ||
+				strings.Contains(relPath, "/Controller/") ||
+				strings.HasPrefix(relPath, "Controller/") {
+				// Получаем имя шаблона без расширения и делаем первую букву заглавной
+				baseName := filepath.Base(relPath)                              // например, controller.php.tmpl
+				baseName = strings.TrimSuffix(baseName, ".tmpl")                // controller.php
+				baseName = strings.TrimSuffix(baseName, filepath.Ext(baseName)) // controller
+				baseName = capitalize(baseName)
+
+				// Имя файла: OperationId (с заглавной) + Имя шаблона (с заглавной) + .php
+				fileName := tmplData.ClassName + baseName + ".php"
+				outDir := filepath.Dir(filepath.Join(outputDir, relPath))
+				outFile = filepath.Join(outDir, fileName)
+			}
+
+			return c.generateFile(path, outFile, tmplData)
 		}
 
 		// просто копируем файл как есть (если не .tmpl)
 		return copyRawFile(path, targetPath)
 	})
+	if err != nil {
+		return err
+	}
+
+	// Генерация файлов по схемам из components/schemas
+	components, ok := data.Content["components"].(map[string]interface{})
+	if ok {
+		schemas, ok := components["schemas"].(map[string]interface{})
+		if ok {
+			tmplPath := filepath.Join(templateDir, "php84_symfony6", "Api", "valueObject.php.tmpl")
+			for schemaName, schemaRaw := range schemas {
+				schema, _ := schemaRaw.(map[string]interface{})
+				summary := ""
+				if s, ok := schema["description"].(string); ok {
+					summary = s
+				}
+				valueObjectData := model.TemplateData{
+					Namespace: "php84_symfony6\\Api",
+					ClassName: schemaName,
+					Content:   schema,
+					FileName:  schemaName + ".php",
+					Summary:   summary,
+				}
+				outDir := filepath.Join(outputDir, "php84_symfony6", "Api")
+				outFile := filepath.Join(outDir, schemaName+".php")
+				if err := c.generateFile(tmplPath, outFile, valueObjectData); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (c *CodeGenerator) generateFile(tmplPath, outPath string, data any) error {

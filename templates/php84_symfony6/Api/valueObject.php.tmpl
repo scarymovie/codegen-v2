@@ -1,14 +1,15 @@
 <?php
+
 declare(strict_types=1);
 
 namespace {{ .Namespace }};
 
 
 /*
- *
+ * {{ .Summary }}
  */
 
-class NwkRawProduct
+class {{ .ClassName }}
 {
     public function __construct(
         public array $categoryIds,

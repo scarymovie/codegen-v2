@@ -24,4 +24,5 @@ type TemplateData struct {
 	StringOpClass          string
 	Content                map[string]interface{}
 	FileName               string
+	Summary                string // описание/summary схемы
 }
