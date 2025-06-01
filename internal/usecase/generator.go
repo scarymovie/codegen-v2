@@ -20,7 +20,7 @@ func (g *GeneratorUseCase) Execute(configDir, templateDir, outputDir string) err
 
 	for _, gen := range g.CodeGens {
 		for _, d := range parsedData {
-			if err := gen.Generate(templateDir, outputDir, d.Content); err != nil {
+			if err := gen.Generate(templateDir, outputDir, d); err != nil {
 				return err
 			}
 		}
