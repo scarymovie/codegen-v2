@@ -1,0 +1,103 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ .Namespace }};
+
+use Doctrine\ORM\EntityManagerInterface;
+use Exception;
+use Psr\Log\LoggerInterface;
+use {{ .ActionNamespace }};
+use {{ .Result200Namespace }};
+use {{ .ResultDefaultNamespace }};
+use {{ .RawProductNamespace }};
+use {{ .ErrorOpNamespace }};
+use {{ .StringOpNamespace }};
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Serializer\SerializerInterface;
+use Symfony\Component\Validator\Validator\ValidatorInterface;
+
+final class {{ .ClassName }}Controller
+{
+    public function __construct(
+        private EntityManagerInterface $entityManager,
+        private readonly LoggerInterface $logger,
+        private readonly SerializerInterface $serializer,
+        private readonly ValidatorInterface $validator,
+        private readonly ?{{ .ClassName }}Action $action,
+    ) {
+    }
+
+    /**
+     * Для тестирования
+     * @param EntityManagerInterface $entityManager
+     */
+    public function setEntityManager(EntityManagerInterface $entityManager): void
+    {
+        $this->entityManager = $entityManager;
+    }
+
+    public function {{ .MethodName }}(Request $request): Response
+    {
+        try {
+            $this->entityManager->beginTransaction();
+
+            $body = $this->serializer->deserialize(
+                $request->getContent(),
+                {{ .RawValueObjectClass }}::class,
+                'json'
+            );
+
+            $errors = $this->validator->validate($body);
+
+            if (count($errors) > 0) {
+                throw new Exception("validator errors");
+            }
+
+            $result = $this->action->{{ .MethodName }}(
+                $body,
+            );
+
+            $this->entityManager->flush();
+            $this->entityManager->commit();
+        } catch (Exception $e) {
+            $this->logger->error(
+                sprintf(
+                    'Uncaught PHP Exception %s: "%s" at %s line %s',
+                    $e::class,
+                    $e->getMessage(),
+                    $e->getFile(),
+                    $e->getLine()
+                ),
+                ['exception' => $e]
+            );
+            $this->entityManager->rollBack();
+            $result = $this->action->createExceptedResult($e);
+        }
+
+        if ($result instanceof {{ .Result200Class }}) {
+            $headers = [
+                'Content-Type' => 'application/json',
+            ];
+            return new Response(
+                {{ .StringOpClass }}::encodeJson(value: $result->content),
+                200,
+                $headers
+            );
+        }
+
+        if ($result instanceof {{ .ResultDefaultClass }}) {
+            $headers = [
+                'Content-Type' => 'application/json',
+            ];
+            return new Response(
+                {{ .ErrorOpClass }}::encodeJson(value: $result->content),
+                $result->statusCode,
+                $headers
+            );
+        }
+
+        return new Response('', 500);
+    }
+}
